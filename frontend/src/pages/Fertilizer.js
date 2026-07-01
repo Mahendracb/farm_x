@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import axios from "axios";
 import { Calculator, FlaskConical, Beaker, Leaf, Store, MapPin, Phone } from "lucide-react";
 
 // Mock Data for standard fertilizer needs per acre (in kg)
@@ -14,7 +15,24 @@ function Fertilizer() {
   const [crop, setCrop] = useState("");
   const [acres, setAcres] = useState(1);
   const [season, setSeason] = useState("Kharif (Monsoon)");
+  const [query, setQuery] = useState("");
   const [calculatedResult, setCalculatedResult] = useState(null);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiError, setAiError] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const clean = (text) => {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/#/g, "")
+    .replace(/`/g, "")
+    .replace(/_/g, "")
+    .replace(/>/g, "")
+    .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+    .replace(/\n+/g, "\n")
+    .trim();
+};
+
 
   const handleCalculate = () => {
     if (!crop || acres <= 0) return;
@@ -25,6 +43,29 @@ function Fertilizer() {
       dap: baseNeeds.dap * acres,
       mop: baseNeeds.mop * acres,
     });
+  };
+
+  const submitFertilizerAI = async () => {
+    if (!query.trim()) {
+      setAiError("Please enter a question for fertilizer advice.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError("");
+    setAiResult(null);
+
+    try {
+      const response = await axios.post("http://localhost:8000/api/ai/text/", {
+        prompt: `Provide fertilizer recommendation and crop planning advice for ${crop || "a crop"}, ${acres} acres, season ${season}. ${query}`,
+      });
+      const cleaned = clean(response.data.result);
+      setAiResult(cleaned);
+    } catch (err) {
+      setAiError(err.response?.data?.error || "AI request failed. Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   return (
@@ -93,6 +134,27 @@ function Fertilizer() {
           >
             Calculate Need
           </button>
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>AI Query</label>
+            <textarea
+              style={styles.textarea}
+              rows={4}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Ask for fertilizer recommendations, soil advice, or crop planning tips."
+            />
+          </div>
+          <button
+            style={{
+              ...styles.secondaryBtn,
+              opacity: aiLoading || !query.trim() ? 0.7 : 1,
+              cursor: aiLoading || !query.trim() ? "not-allowed" : "pointer",
+            }}
+            onClick={submitFertilizerAI}
+            disabled={aiLoading || !query.trim()}
+          >
+            {aiLoading ? "Asking AI..." : "Ask AI for Fertilizer Advice"}
+          </button>
         </div>
 
         {/* Right Column - Results / Empty State */}
@@ -159,6 +221,54 @@ function Fertilizer() {
 
             </div>
           )}
+
+          {(aiLoading || aiError || aiResult) && (
+            <div style={styles.aiPanel}>
+              <div style={styles.aiPanelHeader}>
+                <div style={styles.iconBgSmall}>
+                  <Leaf size={16} color="var(--accent-primary)" />
+                </div>
+                <h4 style={styles.aiPanelTitle}>AI Advice</h4>
+              </div>
+              <div style={styles.aiPanelBody}>
+                {aiLoading ? (
+                  <p style={styles.aiPanelText}>Analyzing your query...</p>
+                ) : aiError ? (
+                  <p style={styles.aiErrorText}>{aiError}</p>
+                ) : (
+                  <div style={styles.aiFormattedText}>
+                    {aiResult
+                      ?.split(/\n{2,}/)
+                      .filter(Boolean)
+                      .map((block, index) => {
+                        const trimmed = block.trim();
+                        if (!trimmed) return null;
+
+                        const isHeading = /^#{1,3}\s/.test(trimmed);
+                        const isBullet = /^[-*•]\s/.test(trimmed);
+                        const isNumbered = /^\d+\.\s/.test(trimmed);
+
+                        if (isHeading) {
+                          const text = trimmed.replace(/^#{1,3}\s/, "");
+                          return <p key={index} style={styles.aiHeading}>{text}</p>;
+                        }
+
+                        if (isBullet || isNumbered) {
+                          return (
+                            <div key={index} style={styles.aiBulletBlock}>
+                              <span style={styles.aiBulletMarker}>{isNumbered ? "•" : "•"}</span>
+                              <span style={styles.aiPanelText}>{trimmed.replace(/^(?:[-*•]|\d+\.\s)/, "")}</span>
+                            </div>
+                          );
+                        }
+
+                        return <p key={index} style={styles.aiPanelText}>{trimmed}</p>;
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
@@ -199,6 +309,7 @@ const styles = {
     borderRadius: "16px",
     display: "flex",
     flexDirection: "column",
+    gap: "16px",
   },
   cardHeader: {
     display: "flex",
@@ -242,6 +353,21 @@ const styles = {
     outline: "none",
     transition: "border-color 0.2s",
   },
+  textarea: {
+    width: "100%",
+    minHeight: "120px",
+    backgroundColor: "var(--bg-main)",
+    border: "1px solid var(--border-color)",
+    padding: "14px 16px",
+    borderRadius: "12px",
+    color: "var(--text-primary)",
+    fontSize: "15px",
+    outline: "none",
+    resize: "vertical",
+    fontFamily: "var(--font-main)",
+    lineHeight: "1.5",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+  },
   calculateBtn: {
     marginTop: "auto",
     width: "100%",
@@ -253,6 +379,100 @@ const styles = {
     fontSize: "16px",
     fontWeight: "600",
     transition: "all 0.2s",
+  },
+  secondaryBtn: {
+    width: "100%",
+    background: "linear-gradient(135deg, var(--accent-primary), #2dd4bf)",
+    color: "var(--text-on-primary)",
+    border: "none",
+    padding: "14px 16px",
+    borderRadius: "12px",
+    fontSize: "15px",
+    fontWeight: "700",
+    transition: "transform 0.2s, box-shadow 0.2s",
+    boxShadow: "0 8px 20px rgba(16, 185, 129, 0.18)",
+    fontFamily: "var(--font-main)",
+    letterSpacing: "0.2px",
+  },
+  errorBox: {
+    marginTop: "12px",
+    padding: "12px 14px",
+    borderRadius: "10px",
+    backgroundColor: "rgba(239, 68, 68, 0.09)",
+    border: "1px solid rgba(239, 68, 68, 0.18)",
+    color: "#dc2626",
+    fontSize: "14px",
+    fontWeight: "500",
+  },
+  aiPanel: {
+    marginTop: "auto",
+    padding: "18px",
+    borderRadius: "12px",
+    backgroundColor: "rgba(16, 185, 129, 0.08)",
+    border: "1px solid rgba(16, 185, 129, 0.18)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.2)",
+  },
+  aiPanelHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginBottom: "10px",
+  },
+  iconBgSmall: {
+    width: "32px",
+    height: "32px",
+    borderRadius: "8px",
+    backgroundColor: "rgba(52, 211, 153, 0.1)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aiPanelTitle: {
+    margin: 0,
+    color: "var(--text-primary)",
+    fontSize: "15px",
+    fontWeight: "700",
+  },
+  aiPanelBody: {
+    maxHeight: "220px",
+    overflowY: "auto",
+    paddingRight: "6px",
+  },
+  aiFormattedText: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  aiHeading: {
+    margin: 0,
+    color: "var(--text-primary)",
+    fontSize: "14px",
+    fontWeight: "700",
+    lineHeight: "1.5",
+  },
+  aiBulletBlock: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "flex-start",
+  },
+  aiBulletMarker: {
+    color: "var(--accent-primary)",
+    fontWeight: "700",
+    marginTop: "2px",
+  },
+  aiPanelText: {
+    margin: 0,
+    color: "var(--text-secondary)",
+    fontSize: "14px",
+    lineHeight: "1.6",
+    whiteSpace: "pre-wrap",
+    fontFamily: "var(--font-main)",
+  },
+  aiErrorText: {
+    margin: 0,
+    color: "#dc2626",
+    fontSize: "14px",
+    lineHeight: "1.6",
   },
   emptyState: {
     display: "flex",

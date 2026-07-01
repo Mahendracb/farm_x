@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CropViewSet, SchemeViewSet, BuyerViewSet, LoginView, UserProfileView, LogoutView, RegisterView
+from .views import CropViewSet, SchemeViewSet, BuyerViewSet, LoginView, UserProfileView, LogoutView, RegisterView, AITextView
 
 router = DefaultRouter()
 router.register(r'crops', CropViewSet)
@@ -13,4 +13,5 @@ urlpatterns = [
     path('auth/login/', LoginView.as_view()),
     path('auth/me/', UserProfileView.as_view()),
     path('auth/logout/', LogoutView.as_view()),
+    path('ai/text/', AITextView.as_view()),
 ]

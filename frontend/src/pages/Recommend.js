@@ -1,4 +1,21 @@
+/*
+VOICE INTEGRATION TEMPLATE
+
+1. Install:
+   npm install react-speech-recognition
+
+2. Add:
+   import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognition";
+
+3. Add the speech hooks, microphone buttons, and speak() helper as discussed.
+
+This file is your original component so you can safely edit it.
+*/
+
 import React, { useState } from "react";
+import {useEffect} from "react";
+import SpeechRecognition,{useSpeechRecognition} from "react-speech-recognition";
+import axios from "axios";
 import { Sparkles, Sprout, Loader2, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "../LanguageContext";
 
@@ -7,14 +24,69 @@ function Recommend() {
   const [soil, setSoil] = useState("Loamy Soil");
   const [season, setSeason] = useState("Kharif (Monsoon)");
   const [water, setWater] = useState("Medium (Some irrigation)");
+  const [query, setQuery] = useState("");
+  const [aiResult, setAiResult] = useState(null);
+  const [aiError, setAiError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  const {
+  transcript,
+  listening,
+  resetTranscript
+}=useSpeechRecognition();
+
+useEffect(()=>{
+  setQuery(transcript);
+},[transcript]);
+useEffect(() => {
+  if (!listening && transcript.trim() !== "") {
+    submitAIQuery(transcript);
+  }
+}, [listening, transcript]);
+
+const startListening = () => {
+  resetTranscript();
+
+  SpeechRecognition.startListening({
+    continuous: false,
+    language: "en-IN",
+  });
+};
+
+const stopListening=()=>{
+  SpeechRecognition.stopListening();
+};
+
+// const speak=(text)=>{
+//   window.speechSynthesis.cancel();
+//   const u=new SpeechSynthesisUtterance(text);
+//   u.lang="en-IN";
+//   window.speechSynthesis.speak(u);
+// };
+const speak = (text) => {
+  window.speechSynthesis.cancel();
+
+  const u = new SpeechSynthesisUtterance(text);
+
+  u.lang = "en-IN";
+  u.rate = 1;
+
+  u.onend = () => {
+    startListening();
+  };
+
+  window.speechSynthesis.speak(u);
+};
+
 
   const generateRecommendations = () => {
     // Simulate AI network delay
     setLoading(true);
     setResults(null);
+    setAiResult(null);
+    setAiError('');
     
     setTimeout(() => {
       let recs = [];
@@ -38,6 +110,54 @@ function Recommend() {
       setResults(recs);
       setLoading(false);
     }, 1500); // 1.5 seconds loading simulation
+  };
+  const stopAll = () => {
+  SpeechRecognition.stopListening();
+  window.speechSynthesis.cancel();
+};
+const cleanResponse = (text) => {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/#/g, "")
+    .replace(/`/g, "")
+    .replace(/_/g, "")
+    .replace(/>/g, "")
+    .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+    .replace(/\n+/g, "\n")
+    .trim();
+};
+
+  const submitAIQuery = async (voiceText = null) => {
+  setAiLoading(true);
+  setAiError("");
+  setAiResult(null);
+
+  const finalQuery =
+    typeof voiceText === "string"
+      ? voiceText
+      : query;
+
+  const promptText = finalQuery.trim()
+    ? `Provide crop recommendation and farming advice based on soil type ${soil}, season ${season}, water availability ${water}. User query: ${finalQuery}`
+    : `Provide crop recommendation and farming advice based on soil type ${soil}, season ${season}, water availability ${water}. Give a practical general recommendation for this farm profile.`;
+      // ? `Provide crop recommendation and farming advice based on soil type ${soil}, season ${season}, water availability ${water}. User query: ${query}`
+      // : `Provide crop recommendation and farming advice based on soil type ${soil}, season ${season}, water availability ${water}. Give a practical general recommendation for this farm profile.`;
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/ai/text/', {
+        prompt: promptText,
+      });const cleaned = cleanResponse(response.data.result);
+
+      setAiResult(cleaned);
+      speak(cleaned);
+    } catch (err) {
+      setAiError(
+        err.response?.data?.error || 'AI query failed. Please try again.'
+      );
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   return (
@@ -89,12 +209,31 @@ function Recommend() {
             </select>
           </div>
 
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>{t("AI Query")}</label>
+            <textarea
+              style={styles.textarea}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Ask the AI for crop or soil recommendations..."
+              rows={4}
+            />
+          </div>
+
           <button 
             style={styles.calculateBtn}
             onClick={generateRecommendations}
-            disabled={loading}
+            disabled={loading || aiLoading}
           >
             {loading ? t("Analyzing...") : t("Get Recommendations")}
+          </button>
+          <button 
+            type="button"
+            style={styles.secondaryBtn}
+            onClick={() => submitAIQuery()}
+            disabled={aiLoading || loading}
+          >
+            {aiLoading ? t("Analyzing...") : "Ask AI for Advice"}
           </button>
         </div>
 
@@ -109,7 +248,7 @@ function Recommend() {
             </div>
           )}
 
-          {!loading && !results && (
+          {!loading && !results && !aiResult && (
             <div style={styles.emptyState}>
               <Sprout size={64} color="var(--text-muted)" style={{marginBottom: "24px", opacity: 0.5}} />
               <h2 style={styles.emptyStateTitle}>{t("Awaiting Input")}</h2>
@@ -139,10 +278,43 @@ function Recommend() {
                       <span style={styles.aiLabel}><Sparkles size={12}/> {t("AI REASONING")}</span>
                       <p style={styles.reasoningText}>{rec.reason}</p>
                     </div>
+                  
+  
                   </div>
                 ))}
               </div>
+              
             </div>
+          )}
+          <button
+  type="button"
+  style={styles.voiceBtnSecondary}
+  onClick={stopAll}
+>
+  ⏹ Stop
+</button>
+          <div style={styles.voiceControls}>
+            <button type="button" style={styles.voiceBtn} onClick={startListening}>
+              🎤 Start
+            </button>
+            <button type="button" style={styles.voiceBtnSecondary} onClick={stopListening}>
+              ⏹ Stop
+            </button>
+          </div>
+
+          <p style={styles.voiceStatus}>{listening ? "Listening..." : "Not Listening"}</p>
+
+          {!loading && aiResult && (
+            <div style={styles.diseaseContainer}>
+              <h3 style={styles.diseaseHeader}>AI Recommendation</h3>
+              <div style={styles.diseaseBox}>
+                <p style={styles.diseaseText}>{aiResult}</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && aiError && (
+            <div style={styles.errorBox}>{aiError}</div>
           )}
         </div>
 
@@ -253,6 +425,89 @@ const styles = {
     fontWeight: "600",
     cursor: "pointer",
     transition: "all 0.2s",
+  },
+  secondaryBtn: {
+    marginTop: "16px",
+    width: "100%",
+    backgroundColor: "var(--bg-secondary)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border-color)",
+    padding: "16px",
+    borderRadius: "12px",
+    fontSize: "16px",
+    fontWeight: "600",
+    cursor: "pointer",
+    transition: "all 0.2s",
+  },
+  textarea: {
+    width: "100%",
+    minHeight: "120px",
+    resize: "vertical",
+    padding: "14px 16px",
+    borderRadius: "12px",
+    border: "1px solid var(--border-color)",
+    backgroundColor: "var(--bg-main)",
+    color: "var(--text-primary)",
+    fontSize: "15px",
+    outline: "none",
+    transition: "border-color 0.2s",
+  },
+  voiceControls: {
+    display: "flex",
+    gap: "10px",
+    marginTop: "12px",
+  },
+  voiceBtn: {
+    flex: 1,
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: "none",
+    backgroundColor: "var(--accent-primary)",
+    color: "var(--text-on-primary)",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+  voiceBtnSecondary: {
+    flex: 1,
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: "1px solid var(--border-color)",
+    backgroundColor: "var(--bg-main)",
+    color: "var(--text-primary)",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+  voiceStatus: {
+    margin: "8px 0 0 0",
+    color: "var(--text-secondary)",
+    fontSize: "14px",
+  },
+  diseaseContainer: {
+    marginTop: "24px",
+  },
+  diseaseHeader: {
+    margin: "0 0 12px 0",
+    fontSize: "20px",
+    color: "var(--text-primary)",
+  },
+  diseaseBox: {
+    backgroundColor: "var(--bg-main)",
+    border: "1px solid var(--border-color)",
+    borderRadius: "16px",
+    padding: "24px",
+  },
+  diseaseText: {
+    color: "var(--text-primary)",
+    lineHeight: "1.7",
+    whiteSpace: "pre-wrap",
+  },
+  errorBox: {
+    marginTop: "24px",
+    backgroundColor: "rgba(248, 113, 113, 0.12)",
+    color: "var(--danger)",
+    padding: "18px",
+    borderRadius: "14px",
+    border: "1px solid rgba(248, 113, 113, 0.25)",
   },
   emptyState: {
     display: "flex",

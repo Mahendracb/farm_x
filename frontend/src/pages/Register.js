@@ -2,17 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
-import { UserCircle, Lock, Loader2, Phone, Mail, User } from 'lucide-react';
+import { UserCircle, Lock, Loader2, User } from 'lucide-react';
 
 function Register() {
   const { register } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
   
-  const [method, setMethod] = useState('phone'); // 'phone' or 'email'
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [contactInfo, setContactInfo] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,10 +19,8 @@ function Register() {
     setLoading(true);
     setError('');
     
-    const email = method === 'email' ? contactInfo : '';
-    
     try {
-      await register(contactInfo, password, firstName, lastName, email);
+      await register(username, password);
       navigate('/');
     } catch (err) {
       if (err.response && err.response.data && err.response.data.error) {
@@ -49,70 +44,17 @@ function Register() {
 
         {error && <div style={styles.error}>{error}</div>}
 
-        <div style={styles.toggleContainer}>
-          <button 
-            type="button"
-            style={method === 'phone' ? styles.toggleBtnActive : styles.toggleBtn}
-            onClick={() => { setMethod('phone'); setContactInfo(''); setError(''); }}
-          >
-            <Phone size={16} /> {t("Phone")}
-          </button>
-          <button 
-            type="button"
-            style={method === 'email' ? styles.toggleBtnActive : styles.toggleBtn}
-            onClick={() => { setMethod('email'); setContactInfo(''); setError(''); }}
-          >
-            <Mail size={16} /> {t("Email")}
-          </button>
-        </div>
-
         <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.row}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>{t("First Name")}</label>
-              <div style={styles.inputWrapper}>
-                <User size={20} color="var(--text-muted)" style={styles.inputIcon} />
-                <input 
-                  type="text" 
-                  value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
-                  style={styles.input} 
-                  placeholder={t("First Name")}
-                  required
-                />
-              </div>
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>{t("Last Name")}</label>
-              <div style={styles.inputWrapper}>
-                <User size={20} color="var(--text-muted)" style={styles.inputIcon} />
-                <input 
-                  type="text" 
-                  value={lastName}
-                  onChange={e => setLastName(e.target.value)}
-                  style={styles.input} 
-                  placeholder={t("Last Name")}
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
           <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              {method === 'phone' ? t("Phone Number") : t("Email Address")}
-            </label>
+            <label style={styles.label}>{t("Username")}</label>
             <div style={styles.inputWrapper}>
-              {method === 'phone' ? 
-                <Phone size={20} color="var(--text-muted)" style={styles.inputIcon} /> :
-                <Mail size={20} color="var(--text-muted)" style={styles.inputIcon} />
-              }
+              <User size={20} color="var(--text-muted)" style={styles.inputIcon} />
               <input 
-                type={method === 'email' ? 'email' : 'text'} 
-                value={contactInfo}
-                onChange={e => setContactInfo(e.target.value)}
+                type="text" 
+                value={username}
+                onChange={e => setUsername(e.target.value)}
                 style={styles.input} 
-                placeholder={method === 'phone' ? "e.g. 9876543210" : "farmer@example.com"}
+                placeholder={t("Enter username")}
                 required
               />
             </div>
